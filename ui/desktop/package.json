@@ -11,7 +11,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "generate-api": "openapi-ts",
-    "start-gui": "pnpm run generate-api && pnpm run i18n:compile && electron-forge start",
+    "start-gui": "pnpm run generate-api && pnpm run i18n:compile && electron-forge start -- --no-sandbox",
     "start-gui-debug": "pnpm run generate-api && pnpm run i18n:compile && electron-forge start -- --inspect=9229",
     "start": "cd ../.. && just run-ui",
     "start:test-error": "GOOSE_TEST_ERROR=true electron-forge start",
