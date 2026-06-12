@@ -1,0 +1,15 @@
+apiVersion: 1
+datasources:
+  - name: TimescaleDB
+    type: postgres
+    url: db:5432
+    user: atlas
+    secureJsonData:
+      password: atlasdev
+    jsonData:
+      database: atlas
+      sslmode: disable
+      postgresVersion: 1600
+      timescaledb: true
+    isDefault: true
+    editable: true

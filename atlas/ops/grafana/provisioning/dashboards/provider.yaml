@@ -1,0 +1,11 @@
+apiVersion: 1
+providers:
+  - name: ATLAS
+    orgId: 1
+    folder: ATLAS
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards/atlas
