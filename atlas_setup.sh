@@ -574,14 +574,14 @@ class BinancePerpAdapter(EventSource):
             await asyncio.sleep(delay)
 
     async def _dispatch(self, msg: dict, symbol: str) -> None:
-        stream = msg.get("stream", "")
+        stream = msg.get("stream", "").lower()
         data = msg.get("data", msg)
         ts_recv = time.time_ns()
-        if "@aggTrade" in stream:
+        if "@aggtrade" in stream:
             self._enqueue(_parse_trade(data, self._canonical(symbol), ts_recv))
         elif "@depth" in stream:
             await self._handle_depth(data, symbol, ts_recv)
-        elif "@forceOrder" in stream:
+        elif "@forceorder" in stream:
             self._enqueue(_parse_liquidation(data, self._canonical(symbol), ts_recv))
 
     async def _handle_depth(self, data: dict, symbol: str, ts_recv: int) -> None:
