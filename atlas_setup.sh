@@ -24,7 +24,8 @@ services:
       test: ["CMD-SHELL", "pg_isready -U atlas -d atlas"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 120s
 
   redis:
     image: redis:7-alpine
@@ -1128,7 +1129,34 @@ cd ..
 echo "All files created successfully"
 echo "Starting ATLAS with Docker Compose..."
 cd barbaros-trader
+
+echo "Stage 1: starting db + redis ..."
+sudo docker compose up -d db redis
+
+echo "Stage 2: waiting for TimescaleDB to become healthy ..."
+for i in $(seq 1 60); do
+  if sudo docker compose exec -T db pg_isready -U atlas -d atlas >/dev/null 2>&1; then
+    echo "  db is ready (after $((i*5))s)"
+    break
+  fi
+  sleep 5
+done
+
+echo "Stage 3: starting app + grafana ..."
 sudo docker compose up -d
+
+echo "Stage 4: verifying app container is up (retry if needed) ..."
+for i in $(seq 1 12); do
+  state=$(sudo docker inspect -f '{{.State.Status}}' barbaros-trader-app-1 2>/dev/null || echo missing)
+  if [ "$state" = "running" ]; then
+    echo "  app container running"
+    break
+  fi
+  echo "  app not running yet (state=$state) - re-running compose up"
+  sudo docker compose up -d
+  sleep 10
+done
+
 echo "==========================="
 echo "ATLAS is running!"
 PUBLIC_IP=$(curl -s ifconfig.me 2>/dev/null || echo "YOUR_SERVER_IP")
