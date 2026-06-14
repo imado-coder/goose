@@ -507,6 +507,7 @@ class BinancePerpAdapter(EventSource):
         self._tasks: list[asyncio.Task] = []
         self._running = False
         self._book_last_u: dict[str, int] = {}
+        self._book_anchored: dict[str, bool] = {}
         self._book_degraded: dict[str, bool] = {}
         self._gap_start_ns: dict[str, int] = {}
         self._gap_cb: GapCallback | None = None
@@ -585,11 +586,30 @@ class BinancePerpAdapter(EventSource):
             self._enqueue(_parse_liquidation(data, self._canonical(symbol), ts_recv))
 
     async def _handle_depth(self, data: dict, symbol: str, ts_recv: int) -> None:
+        U = data.get("U", 0)
         u = data.get("u", 0)
         pu = data.get("pu")
         last_u = self._book_last_u.get(symbol)
-        if last_u is not None and pu != last_u:
-            log.error("DOM SEQ GAP on %s: pu=%s != last_u=%d -> DEGRADED", symbol, pu, last_u)
+
+        if not self._book_anchored.get(symbol):
+            if last_u is not None and u < last_u:
+                return
+            if last_u is not None and U > last_u + 1:
+                self._book_last_u[symbol] = u
+                self._book_anchored[symbol] = True
+                if not self._book_degraded.get(symbol):
+                    self._book_degraded[symbol] = True
+                    self._gap_start_ns[symbol] = ts_recv
+                    asyncio.create_task(self._resync_book(symbol), name=f"resync:{symbol}")
+                return
+            self._book_last_u[symbol] = u
+            self._book_anchored[symbol] = True
+            self._book_degraded[symbol] = False
+            self._emit_book_delta(data, symbol, ts_recv, U, u)
+            return
+
+        if pu != last_u:
+            log.error("DOM SEQ GAP on %s: pu=%s != last_u=%s -> DEGRADED", symbol, pu, last_u)
             if not self._book_degraded.get(symbol):
                 self._book_degraded[symbol] = True
                 self._gap_start_ns[symbol] = ts_recv
@@ -598,6 +618,9 @@ class BinancePerpAdapter(EventSource):
         self._book_last_u[symbol] = u
         if self._book_degraded.get(symbol):
             return
+        self._emit_book_delta(data, symbol, ts_recv, U, u)
+
+    def _emit_book_delta(self, data: dict, symbol: str, ts_recv: int, U: int, u: int) -> None:
         ts_ex_ns = data.get("T", 0) * 1_000_000 or ts_recv
         self._enqueue(MarketEvent(
             ts_exchange=ts_ex_ns, ts_received=ts_recv, venue=VENUE,
@@ -605,7 +628,7 @@ class BinancePerpAdapter(EventSource):
             payload=BookDeltaPayload(
                 bids=[BookLevel(price=float(p), qty=float(q)) for p, q in data.get("b", [])[:10]],
                 asks=[BookLevel(price=float(p), qty=float(q)) for p, q in data.get("a", [])[:10]],
-                first_update_id=data.get("U", 0), last_update_id=u,
+                first_update_id=U, last_update_id=u,
             ), seq=u,
         ))
 
@@ -686,6 +709,7 @@ class BinancePerpAdapter(EventSource):
         ts_recv = time.time_ns()
         last_u = int(d["lastUpdateId"])
         self._book_last_u[symbol] = last_u
+        self._book_anchored[symbol] = False
         return MarketEvent(
             ts_exchange=ts_recv, ts_received=ts_recv, venue=VENUE,
             symbol=self._canonical(symbol), kind=EventKind.BOOK_SNAPSHOT,
