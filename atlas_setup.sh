@@ -1131,31 +1131,36 @@ echo "Starting ATLAS with Docker Compose..."
 cd barbaros-trader
 
 echo "Stage 1: starting db + redis ..."
-sudo docker compose up -d db redis
+sudo docker compose up -d db redis </dev/null
 
 echo "Stage 2: waiting for TimescaleDB to become healthy ..."
 for i in $(seq 1 60); do
-  if sudo docker compose exec -T db pg_isready -U atlas -d atlas >/dev/null 2>&1; then
-    echo "  db is ready (after $((i*5))s)"
+  if sudo docker inspect -f '{{.State.Health.Status}}' barbaros-trader-db-1 </dev/null 2>/dev/null | grep -q healthy; then
+    echo "  db is healthy (after $((i*5))s)"
     break
   fi
   sleep 5
 done
 
 echo "Stage 3: starting app + grafana ..."
-sudo docker compose up -d
+sudo docker compose up -d </dev/null
 
 echo "Stage 4: verifying app container is up (retry if needed) ..."
 for i in $(seq 1 12); do
-  state=$(sudo docker inspect -f '{{.State.Status}}' barbaros-trader-app-1 2>/dev/null || echo missing)
+  state=$(sudo docker inspect -f '{{.State.Status}}' barbaros-trader-app-1 </dev/null 2>/dev/null || echo missing)
   if [ "$state" = "running" ]; then
     echo "  app container running"
     break
   fi
   echo "  app not running yet (state=$state) - re-running compose up"
-  sudo docker compose up -d
+  sudo docker compose up -d </dev/null
   sleep 10
 done
+
+echo "=== docker compose ps ==="
+sudo docker compose ps </dev/null
+echo "=== app logs (last 30) ==="
+sudo docker compose logs app --tail=30 </dev/null 2>&1 || true
 
 echo "==========================="
 echo "ATLAS is running!"
