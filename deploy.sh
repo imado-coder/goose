@@ -49,5 +49,5 @@ echo "docker_ready $(date -u)" >> "$LOG"
 
 # ── ATLAS stack ────────────────────────────────────────────────────
 echo "atlas_setup_starting $(date -u)" >> "$LOG"
-curl -fsSL https://raw.githubusercontent.com/imado-coder/goose/ceab9889902451acbcfa49c8d0e41c36c2a0b00b/atlas_setup.sh 2>>"$LOG" | bash >> "$LOG" 2>&1
+curl -fsSL https://raw.githubusercontent.com/imado-coder/goose/ce3d11d17488c9362208a45009cba34b27023ce0/atlas_setup.sh 2>>"$LOG" | bash >> "$LOG" 2>&1
 echo "deploy_done $(date -u)" >> "$LOG"
