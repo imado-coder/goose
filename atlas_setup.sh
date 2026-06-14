@@ -547,7 +547,7 @@ class BinancePerpAdapter(EventSource):
 
     async def _ws_worker(self, symbol: str) -> None:
         sym_lower = symbol.lower()
-        streams = [f"{sym_lower}@aggTrade", f"{sym_lower}@depth@100ms", f"{sym_lower}@forceOrder"]
+        streams = [f"{sym_lower}@trade", f"{sym_lower}@depth@100ms", f"{sym_lower}@forceOrder"]
         url = f"{self._s.binance_ws_base}/stream?streams=" + "/".join(streams)
         attempt = 0
         while self._running:
@@ -574,14 +574,14 @@ class BinancePerpAdapter(EventSource):
             await asyncio.sleep(delay)
 
     async def _dispatch(self, msg: dict, symbol: str) -> None:
-        stream = msg.get("stream", "").lower()
         data = msg.get("data", msg)
+        etype = data.get("e", "")
         ts_recv = time.time_ns()
-        if "@aggtrade" in stream:
+        if etype in ("trade", "aggTrade"):
             self._enqueue(_parse_trade(data, self._canonical(symbol), ts_recv))
-        elif "@depth" in stream:
+        elif etype == "depthUpdate":
             await self._handle_depth(data, symbol, ts_recv)
-        elif "@forceorder" in stream:
+        elif etype == "forceOrder":
             self._enqueue(_parse_liquidation(data, self._canonical(symbol), ts_recv))
 
     async def _handle_depth(self, data: dict, symbol: str, ts_recv: int) -> None:
@@ -703,12 +703,13 @@ class BinancePerpAdapter(EventSource):
             log.warning("Event queue full - dropping %s", event.kind)
 
 def _parse_trade(data: dict, canonical: str, ts_recv: int) -> MarketEvent:
+    trade_id = int(data.get("a", data.get("t", 0)))
     return MarketEvent(
         ts_exchange=data["T"] * 1_000_000, ts_received=ts_recv, venue=VENUE, symbol=canonical,
         kind=EventKind.TRADE,
         payload=TradePayload(price=float(data["p"]), qty=float(data["q"]),
-            aggressor_side="sell" if data["m"] else "buy", trade_id=int(data["a"])),
-        seq=int(data["a"]),
+            aggressor_side="sell" if data["m"] else "buy", trade_id=trade_id),
+        seq=trade_id,
     )
 
 def _parse_liquidation(data: dict, canonical: str, ts_recv: int) -> MarketEvent:
